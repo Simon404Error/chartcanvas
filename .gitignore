@@ -2,4 +2,7 @@ venv/
 __pycache__/
 *.pyc
 sample_data/
+dist/
+build/
+*.spec
 .DS_Store
