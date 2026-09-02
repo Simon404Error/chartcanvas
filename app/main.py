@@ -16,7 +16,7 @@ try:
 except Exception:
     pd = None
 
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 
 AGG_FUNCS = {
     "求和 sum": "sum",
@@ -245,6 +245,8 @@ def _read_table(path):
 
 
 def resource_dir():
+    if getattr(sys, "frozen", False):  # PyInstaller 打包后
+        return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
 
@@ -262,7 +264,7 @@ def main():
         height=840,
         min_size=(1000, 640),
     )
-    webview.start(debug=True, http_server=True)
+    webview.start(debug=False, http_server=True)
 
 
 if __name__ == "__main__":
