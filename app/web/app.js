@@ -28,6 +28,96 @@ const THEMES = {
   Pastel: "Pastel", Bold: "Bold", Set1: "Set1",
 };
 
+/* ============================ 可编辑数据表 ============================ */
+let DT = { headers: [], rows: [], filter: "", sel: new Set(), visible: [] };
+
+function toggleDataTable() {
+  const p = $("dataTablePanel");
+  if (p.style.display === "none") {
+    if (!S.schema) { toast("先加载数据", true); return; }
+    p.style.display = "flex"; $("mainCol").style.minHeight = "0";
+    renderDataTable();
+  } else { p.style.display = "none"; }
+}
+
+async function renderDataTable() {
+  const wrap = $("dtWrap");
+  wrap.innerHTML = `<div style="padding:14px" class="muted">正在载入数据表…</div>`;
+  let t;
+  try { t = await pywebview.api.table_rows(JSON.stringify({ limit: 3000 })); }
+  catch (e) { wrap.innerHTML = `<div style="padding:14px;color:#c0392b">载入失败：${e}</div>`; return; }
+  if (!t || !t.ok) { wrap.innerHTML = `<div style="padding:14px;color:#c0392b">${(t && t.error) || "失败"}</div>`; return; }
+  DT.headers = t.headers; DT.rows = t.rows; DT.sel.clear(); DT.filter = "";
+  $("dtSearch").value = "";
+  $("dtWrap").scrollTop = 0;
+  drawTable(t.shown, t.total);
+}
+
+function drawTable(shown, total) {
+  const wrap = $("dtWrap");
+  const q = DT.filter.toLowerCase();
+  const rows = shown !== undefined ? DT.rows.slice(0, shown) : DT.rows;
+  DT.visible = rows.map(r => r).filter(r => {
+    if (!q) return true;
+    return Object.values(r.v).some(v => String(v == null ? "" : v).toLowerCase().includes(q));
+  });
+  let html = `<table><thead><tr><th class="rowsel"></th>`;
+  DT.headers.forEach(h => html += `<th title="${esc(h)}">${esc(h)}</th>`);
+  html += `</tr></thead><tbody>`;
+  for (const row of DT.visible) {
+    html += `<tr data-r="${row.r}"><td class="rowcell${DT.sel.has(row.r) ? " sel" : ""}" data-sel="${row.r}">${row.r + 1}</td>`;
+    for (const h of DT.headers) {
+      const v = row.v[h];
+      const vs = v === null || v === undefined ? "" : String(v);
+      html += `<td><input data-col="${esc(h)}" data-r="${row.r}" value="${esc(vs)}" spellcheck="false"></td>`;
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+  wrap.innerHTML = html;
+  // 绑定输入
+  wrap.querySelectorAll("input[data-col]").forEach(inp => {
+    inp.addEventListener("change", () => commitCell(inp.dataset.r, inp.dataset.col, inp.value));
+  });
+  // 行选择（删除用）
+  wrap.querySelectorAll("td[data-sel]").forEach(td => {
+    td.onclick = () => {
+      const r = +td.dataset.sel;
+      DT.sel.has(r) ? DT.sel.delete(r) : DT.sel.add(r);
+      drawTable();
+    };
+  });
+  // 更新状态条
+  const head = $("dataTablePanel").querySelector(".dt-head b");
+  head.textContent = `✏️ 数据表：共 ${DT.rows.length} 行 × ${DT.headers.length} 列` + (total !== undefined && total > DT.rows.length ? `（显示前 ${DT.rows.length} 行，共 ${total}）` : "");
+}
+
+async function commitCell(r, col, value) {
+  try {
+    await pywebview.api.update_cells(JSON.stringify({ cells: [{ r: +r, col, value }] }));
+    // 更新本地缓存
+    const row = DT.rows.find(x => x.r === +r);
+    if (row) row.v[col] = value;
+    toast("已更新，图表同步中…");
+    debouncedBuild();  // 重绘图表
+  } catch (e) { toast("更新失败：" + e, true); }
+}
+
+function dtSearch(v) { DT.filter = v; drawTable(); }
+
+async function dtAddRow() {
+  const a = await pywebview.api.add_row();
+  if (a && a.ok) { await renderDataTable(); toast("已加一行"); }
+  else toast((a && a.error) || "失败", true);
+}
+
+async function dtDelRow() {
+  if (!DT.sel.size) { toast("请先点行号选中要删的行", true); return; }
+  const a = await pywebview.api.delete_rows(JSON.stringify({ rows: [...DT.sel] }));
+  if (a && a.ok) { await renderDataTable(); toast(`已删除 ${a.deleted} 行`); debouncedBuild(); }
+  else toast((a && a.error) || "失败", true);
+}
+
 /* ============================ 工具 ============================ */
 const $ = id => document.getElementById(id);
 const num = v => { const n = Number(v); return isFinite(n) ? n : null; };
@@ -699,6 +789,11 @@ function initExtControls() {
 function bindEvents() {
   $("btnOpen").onclick = openFile;
   $("btnDemo").onclick = loadDemo;
+  $("btnDataTable").onclick = toggleDataTable;
+  $("btnCloseTable").onclick = () => { $("dataTablePanel").style.display = "none"; };
+  $("btnAddRow").onclick = dtAddRow;
+  $("btnDelRow").onclick = dtDelRow;
+  $("dtSearch").addEventListener("input", e => dtSearch(e.target.value));
   $("btnReset").onclick = () => { $("inTitle").value = ""; };
   ["selX", "selY", "selSeries", "selAgg"].forEach(id => $(id).addEventListener("change", debounce(buildPlot)));
   ["inTitle", "inW", "inH", "selFont", "selBg", "selTheme"].forEach(id => {
@@ -778,5 +873,16 @@ async function selftestAll() {
   xSel.value = xCat; serSel.value = ""; setY([xNum]); await run("radar");
   xSel.value = xCat; serSel.value = ""; setY([xNum]); await run("summary");
   log("SELFTEST_DONE");
+  // 表格链路
+  try {
+    toggleDataTable();
+    await new Promise(r => setTimeout(r, 400));
+    const first = document.querySelector("#dtWrap input[data-col]");
+    if (first) {
+      first.value = "777";
+      await commitCell(first.dataset.r, first.dataset.col, "777");
+      log("SELFTEST table_edit:OK");
+    } else log("SELFTEST table_edit:NO_CELL");
+  } catch (e) { log("SELFTEST table_edit:FAIL " + e); }
 }
 function typeName(id) { const m = CHART_TYPES.find(x => x[0] === id); return m ? m[1] : id; }

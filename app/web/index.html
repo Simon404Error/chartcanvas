@@ -29,6 +29,7 @@
     <aside id="sidebar">
       <section class="panel">
         <div class="panel-title" data-t="数据">▾ 数据与字段</div>
+        <button id="btnDataTable" class="ghost small" style="width:100%;margin-bottom:8px">✏️ 数据表（可编辑，改后图表实时更新）</button>
         <div id="schemaBox" class="muted small">打开文件后此处显示字段。</div>
         <div class="field">
           <label>X 轴 / 分类</label>
@@ -60,15 +61,29 @@
 
     <!-- ===== 主区 ===== -->
     <main id="main">
-      <div id="plotArea">
-        <div id="plotHint" class="hint">
-          <h2>欢迎使用 ChartCanvas</h2>
-          <p>① 点击「📂 打开 Excel / CSV」选择数据文件</p>
-          <p>② 在左侧选择 X 轴、Y 轴字段与图表类型</p>
-          <p>③ 在右侧「自定义样式」中深度调整图表外观，实时预览</p>
-          <p class="sub">已内置多种统计图：柱状 / 折线 / 面积 / 饼环 / 散点气泡 / 直方图 / 箱线 / 热力图 / 雷达 / 漏斗 / 统计概要。</p>
+      <div id="mainCol">
+        <div id="plotArea">
+          <div id="plotHint" class="hint">
+            <h2>欢迎使用 ChartCanvas</h2>
+            <p>① 点击「📂 打开 Excel / CSV」选择数据文件</p>
+            <p>② 在左侧选择 X 轴、Y 轴字段与图表类型</p>
+            <p>③ 在右侧「自定义样式」中深度调整图表外观，实时预览</p>
+            <p class="sub">已内置多种统计图：柱状 / 折线 / 面积 / 饼环 / 散点气泡 / 直方图 / 箱线图 / 热力图 / 雷达 / 帕累托 / 统计概要。</p>
+          </div>
+          <div id="plot" style="display:none"></div>
         </div>
-        <div id="plot" style="display:none"></div>
+        <div id="dataTablePanel" style="display:none">
+          <div class="dt-head">
+            <b>✏️ 数据表（双击单元格修改，回车/失焦生效，图表同步更新）</b>
+            <span class="dt-bar">
+              <input id="dtSearch" type="text" placeholder="搜索行…">
+              <button id="btnAddRow" class="ghost small">＋ 加一行</button>
+              <button id="btnDelRow" class="ghost small">－ 删选中行</button>
+              <button id="btnCloseTable" class="ghost small">关闭</button>
+            </span>
+          </div>
+          <div id="dtWrap"></div>
+        </div>
       </div>
     </main>
 

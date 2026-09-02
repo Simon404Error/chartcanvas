@@ -16,7 +16,7 @@ try:
 except Exception:
     pd = None
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 AGG_FUNCS = {
     "求和 sum": "sum",
@@ -38,6 +38,8 @@ class Api:
         self.df = None
         self.file_name = ""
         self.loaded = False
+        self.sheets = []
+        self.active_sheet = ""
 
     def version(self):
         return {"app": __version__, "pandas": pd.__version__ if pd else "N/A"}
@@ -79,13 +81,29 @@ class Api:
             return self.load_path(demo)
         return {"ok": False, "error": "未找到演示数据"}
 
-    def load_path(self, path):
+    def load_path(self, path, sheet=None):
         try:
-            df = _read_table(path)
+            df, sheets, active = _read_table(path, sheet)
         except Exception as e:
-            return {"ok": False, "error": f"读取失败：{e}"}
+            return {"ok": False, "error": f"读取失败：{_friendly_read_err(e)}"}
         self.df = df
         self.file_name = os.path.basename(path)
+        self._last_path = path
+        self.sheets = sheets
+        self.active_sheet = active
+        self.loaded = True
+        return self._describe()
+
+    def load_sheet(self, sheet):
+        """切换 Excel 工作表。"""
+        if not self.sheets:
+            return {"ok": False, "error": "非 Excel 或仅一个表"}
+        try:
+            df, sheets, active = _read_table(self._last_path, sheet)
+        except Exception as e:
+            return {"ok": False, "error": f"读取失败：{_friendly_read_err(e)}"}
+        self.df = df
+        self.active_sheet = active
         self.loaded = True
         return self._describe()
 
@@ -114,6 +132,8 @@ class Api:
             "columns": cols,
             "headers": [str(c) for c in df.columns],
             "preview": preview,
+            "sheets": self.sheets,
+            "active_sheet": self.active_sheet,
         }
 
     def get_schema(self):
@@ -177,6 +197,102 @@ class Api:
                 col_types[c] = _dtype_of(df[c])
         return {"ok": True, "series": out, "colTypes": col_types}
 
+    # ---------------- 可编辑数据表 ---------------- #
+    def table_rows(self, req):
+        """返回整表数据供前端编辑。req:{limit}
+        返回 rows:[{r:行号, cols:{列名:值}}]"""
+        if not self.loaded:
+            return {"ok": False, "error": "尚未加载数据"}
+        try:
+            cfg = json.loads(req) if isinstance(req, str) else req
+        except Exception:
+            cfg = req
+        limit = int(cfg.get("limit") or 2000)
+        df = self.df.head(limit)
+        headers = [str(c) for c in df.columns]
+        rows = []
+        for i in range(len(df)):
+            rec = {"r": i, "v": {}}
+            for c in df.columns:
+                rec["v"][str(c)] = _cell(df, i, c)
+            rows.append(rec)
+        return {"ok": True, "headers": headers, "rows": rows, "total": int(len(self.df)), "shown": len(rows)}
+
+    def update_cells(self, req):
+        """前端编辑后回写。req:{cells:[{r, col, value}]}"""
+        if not self.loaded:
+            return {"ok": False, "error": "尚未加载数据"}
+        try:
+            cfg = json.loads(req) if isinstance(req, str) else req
+        except Exception:
+            cfg = req
+        for cell in cfg.get("cells", []):
+            r, col = int(cell["r"]), str(cell["col"])
+            if r < 0 or r >= len(self.df) or col not in self.df.columns:
+                continue
+            _set_cell(self.df, r, col, cell.get("value"))
+        return {"ok": True, "changed": len(cfg.get("cells", []))}
+
+    def delete_rows(self, req):
+        """删除若干行。req:{rows:[索引]}"""
+        if not self.loaded:
+            return {"ok": False, "error": "尚未加载数据"}
+        try:
+            cfg = json.loads(req) if isinstance(req, str) else req
+        except Exception:
+            cfg = req
+        idx = sorted({int(r) for r in cfg.get("rows", [])}, reverse=True)
+        for r in idx:
+            if 0 <= r < len(self.df):
+                self.df = self.df.drop(self.df.index[r]).reset_index(drop=True)
+        return {"ok": True, "deleted": len(idx)}
+
+    def add_row(self):
+        """追加一行空行。"""
+        if not self.loaded:
+            return {"ok": False, "error": "尚未加载数据"}
+        self.df.loc[len(self.df)] = [float("nan")] * self.df.shape[1]
+        return {"ok": True, "row": int(len(self.df) - 1)}
+
+
+def _cell(df, r, c):
+    v = df.iat[r, df.columns.get_loc(c)]
+    if v is None:
+        return ""
+    if isinstance(v, float) and v != v:
+        return ""
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    if hasattr(v, "item"):  # numpy 标量 -> 原生
+        try:
+            return v.item()
+        except Exception:
+            pass
+    if isinstance(v, (int, float, str, bool)) or v is None:
+        return v
+    return str(v)
+
+
+def _set_cell(df, r, c, value):
+    """写入单元格，保持列类型一致性。value:'' -> NaN"""
+    i = df.columns.get_loc(c)
+    cur = df.iloc[:, i]
+    try:
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            df.iat[r, i] = float("nan")
+            return
+        # 目标列当前为数值则转数值
+        if pd.api.types.is_numeric_dtype(cur):
+            try:
+                df.iat[r, i] = float(value)
+            except Exception:
+                # 该列可能因此转为 object，改后重新推断
+                df.iat[r, i] = value
+        else:
+            df.iat[r, i] = str(value)
+    except Exception:
+        df.iat[r, i] = value
+
 
 def _sanitize(arr):
     out = []
@@ -227,21 +343,75 @@ def _dtype_of(s):
         return "category"
 
 
-def _read_table(path):
+def _friendly_read_err(e):
+    """把底层异常转成对用户友好的中文提示。"""
+    msg = str(e)
+    low = msg.lower()
+    if "xlrd" in low and ("xlrd biff" in low or "unsupported format" in low or "install xlrd" in low):
+        return "旧版 .xls 需要 xlrd 库，请安装后重试"
+    if "no module named 'xlrd'" in low:
+        return "缺少 xlrd 库，无法读取 .xls"
+    if "no module named 'openpyxl'" in low or "install openpyxl" in low:
+        return "缺少 openpyxl 库，无法读取 .xlsx"
+    if "unsupported format" in low or "file is not a zip" in low or "bad magic" in low:
+        return "文件可能不是有效的 Excel（或已损坏/被加密）"
+    if "permission" in low or "is being used by another process" in low:
+        return "文件正被占用，请先关闭打开它的程序"
+    if "not a valid filename" in low or "no such file" in low or "does not exist" in low:
+        return "找不到该文件，可能路径已改变"
+    # 截断过长的异常
+    return (msg[:300] + "…") if len(msg) > 300 else msg
+
+
+def _read_table(path, sheet=None):
+    """读取并返回 (DataFrame, sheet 列表, 当前 sheet)。
+    Excel 支持多 sheet；sheet=None 时自动取第一个有内容的表。"""
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xls"):
-        # 读取第一个 sheet
         xl = pd.ExcelFile(path)
-        sheet = xl.sheet_names[0]
+        names = list(xl.sheet_names)
+        if sheet is None or sheet not in names:
+            # 找第一个非空内容的 sheet
+            chosen = _first_populated(xl)
+            sheet = chosen
         df = xl.parse(sheet)
-        return df
+        # 清理：删除全空列/行
+        df = df.dropna(axis=1, how="all")
+        df = df.dropna(axis=0, how="all")
+        if df.shape[1] == 0:
+            raise ValueError("该工作表没有可用数据列")
+        return df, names, sheet
     if ext in (".csv", ".tsv", ".txt"):
-        enc = "utf-8-sig"
-        sample = open(path, "r", encoding=enc).read(4096)
-        has_tab = "\t" in sample
-        sep = "\t" if has_tab else ","
-        return pd.read_csv(path, sep=sep, engine="python", encoding=enc)
+        df = _read_text(path)
+        return df, ["CSV 数据"], "CSV 数据"
     raise ValueError(f"不支持的文件类型：{ext}")
+
+
+def _first_populated(xl):
+    """返回第一个含数据的 sheet 名。"""
+    for name in xl.sheet_names:
+        try:
+            probe = xl.parse(name, nrows=50)
+            nonempty = probe.notna().any(axis=0).sum()
+            if probe.shape[1] > 0 and nonempty > 0:
+                return name
+        except Exception:
+            continue
+    return xl.sheet_names[0]
+
+
+def _read_text(path):
+    for enc in ("utf-8-sig", "gbk", "utf-8", "latin-1"):
+        try:
+            sample = open(path, "r", encoding=enc).read(4096)
+            has_tab = "\t" in sample and "," not in sample
+            sep = "\t" if has_tab else ","
+            df = pd.read_csv(path, sep=sep, engine="python", encoding=enc)
+            if df.shape[1] >= 1:
+                return df
+        except Exception:
+            continue
+    raise ValueError("无法识别 CSV 编码，请用 UTF-8 或 GBK 保存")
 
 
 def resource_dir():

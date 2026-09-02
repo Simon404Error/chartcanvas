@@ -1,4 +1,5 @@
 pywebview>=4.0
 pandas>=2.0
 openpyxl>=3.0
+xlrd>=2.0
 plotly>=5.18
