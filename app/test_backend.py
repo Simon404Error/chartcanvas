@@ -14,6 +14,23 @@ def check(name, cond, extra=""):
     print(("PASS " if cond else "FAIL ") + name + ("  " + extra if extra else ""))
     if not cond: ok = False
 
+# 文件过滤器格式校验（与 create_file_dialog 相同规则）
+try:
+    from webview.util import parse_file_type as _pft
+    _file_types = (
+        "Excel 与 CSV 文件 (*.xlsx;*.xls;*.csv;*.tsv;*.txt)",
+        "Excel 工作簿 (*.xlsx;*.xls)",
+        "CSV 文本文件 (*.csv;*.tsv;*.txt)",
+        "所有文件 (*.*)",
+    )
+    for _ft in _file_types:
+        _pft(_ft)
+    check("file_types valid", True)
+except ImportError:
+    print("(skip: no pywebview)")
+except Exception as e:
+    check("file_types valid", False, e)
+
 api = main.Api()
 
 # CSV load

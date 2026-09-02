@@ -16,7 +16,7 @@ try:
 except Exception:
     pd = None
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 AGG_FUNCS = {
     "求和 sum": "sum",
@@ -61,9 +61,9 @@ class Api:
         if win is None:
             return {"ok": False, "error": "窗口未就绪"}
         file_types = (
-            "Excel/CSV (*.xlsx;*.xls;*.csv;*.tsv;*.txt)",
-            "Excel (*.xlsx;*.xls)",
-            "CSV (*.csv;*.tsv;*.txt)",
+            "Excel 与 CSV 文件 (*.xlsx;*.xls;*.csv;*.tsv;*.txt)",
+            "Excel 工作簿 (*.xlsx;*.xls)",
+            "CSV 文本文件 (*.csv;*.tsv;*.txt)",
             "所有文件 (*.*)",
         )
         chosen = win.create_file_dialog(
