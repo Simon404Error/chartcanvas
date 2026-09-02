@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChartCanvas 可视化画图</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- ===== 顶部 ===== -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">◧</span>
+      <div>
+        <h1>ChartCanvas 可视化画图</h1>
+        <div id="fileInfo" class="fileinfo">尚未加载数据</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btnDemo" class="ghost">✨ 加载示例数据</button>
+      <button id="btnOpen" class="primary">📂 打开 Excel / CSV</button>
+      <button id="btnReset" class="ghost">↺ 重置配置</button>
+    </div>
+  </header>
+
+  <div id="body">
+    <!-- ===== 左侧栏 ===== -->
+    <aside id="sidebar">
+      <section class="panel">
+        <div class="panel-title" data-t="数据">▾ 数据与字段</div>
+        <div id="schemaBox" class="muted small">打开文件后此处显示字段。</div>
+        <div class="field">
+          <label>X 轴 / 分类</label>
+          <select id="selX"></select>
+        </div>
+        <div class="field">
+          <label>Y 轴 / 数值（可多选）</label>
+          <select id="selY" multiple size="4"></select>
+        </div>
+        <div class="field">
+          <label>按列着色（系列分组）</label>
+          <select id="selSeries"><option value="">— 无 —</option></select>
+        </div>
+        <div class="field">
+          <label>数值聚合</label>
+          <select id="selAgg"></select>
+        </div>
+        <details id="filtersPanel">
+          <summary>数据筛选</summary>
+          <div id="filterBox"></div>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title" data-t="type">▾ 图表类型</div>
+        <div id="chartTypes" class="chart-type-grid"></div>
+      </section>
+    </aside>
+
+    <!-- ===== 主区 ===== -->
+    <main id="main">
+      <div id="plotArea">
+        <div id="plotHint" class="hint">
+          <h2>欢迎使用 ChartCanvas</h2>
+          <p>① 点击「📂 打开 Excel / CSV」选择数据文件</p>
+          <p>② 在左侧选择 X 轴、Y 轴字段与图表类型</p>
+          <p>③ 在右侧「自定义样式」中深度调整图表外观，实时预览</p>
+          <p class="sub">已内置多种统计图：柱状 / 折线 / 面积 / 饼环 / 散点气泡 / 直方图 / 箱线 / 热力图 / 雷达 / 漏斗 / 统计概要。</p>
+        </div>
+        <div id="plot" style="display:none"></div>
+      </div>
+    </main>
+
+    <!-- ===== 右侧样式栏 ===== -->
+    <aside id="stylebar">
+      <section class="panel">
+        <div class="panel-title">样式与自定义</div>
+        <div class="field">
+          <label>图表标题</label>
+          <input id="inTitle" type="text" placeholder="自动生成 / 留空">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>宽度(p)</label>
+            <input id="inW" type="number" value="900" min="400">
+          </div>
+          <div class="field">
+            <label>高度(p)</label>
+            <input id="inH" type="number" value="520" min="300">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>字体</label>
+            <select id="selFont">
+              <option value="Microsoft YaHei">微软雅黑</option>
+              <option value="SimHei">黑体</option>
+              <option value="Arial">Arial</option>
+              <option value="Georgia">Georgia</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>字号</label>
+            <input id="inFontSize" type="number" value="13" min="9" max="30">
+          </div>
+        </div>
+        <div class="field">
+          <label>配色主题</label>
+          <select id="selTheme">
+            <option value="Plotly">Plotly 默认</option>
+            <option value="Ocean">海洋 Ocean</option>
+            <option value="Viridis">Viridis</option>
+            <option value="Dark2">Dark2</option>
+            <option value="Pastel">Pastel</option>
+            <option value="Bold">Bold</option>
+            <option value="Set1">Set1</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>背景风格</label>
+          <select id="selBg">
+            <option value="white">白底</option>
+            <option value="light">浅灰网格</option>
+            <option value="dark">深色</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="panel" id="panelStyleExt">
+        <div class="panel-title">细节选项</div>
+        <div id="detailOpts"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">导出</div>
+        <div class="export-btns">
+          <button id="btnPng" class="primary">⬇ 导出 PNG</button>
+          <button id="btnSvg" class="ghost">⬇ 导出 SVG</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <div id="toast"></div>
+</div>
+<script src="lib/plotly.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
